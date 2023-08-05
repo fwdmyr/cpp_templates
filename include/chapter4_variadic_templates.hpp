@@ -4,7 +4,6 @@
 #include <array>
 #include <iostream>
 #include <string>
-#include <vector>
 
 // This template gets preferred during overload resolution if trailing parameter
 // pack is empty

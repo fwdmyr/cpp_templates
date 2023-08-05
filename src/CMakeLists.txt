@@ -4,4 +4,5 @@ macro(package_add_executable EXECNAME FILES)
     target_compile_features(${EXECNAME} PRIVATE cxx_std_17)
 endmacro()
 
-package_add_executable(examples_variadic_templates variadic_templates.cpp)
+package_add_executable(chapter4_variadic_templates chapter4_variadic_templates.cpp)
+package_add_executable(chapter5_tricky_basics chapter5_tricky_basics.cpp)

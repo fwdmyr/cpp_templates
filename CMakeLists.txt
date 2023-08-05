@@ -18,7 +18,7 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 endif()
 
 set(HEADERS_LIST
-  include/VariadicTemplates.hpp
+  include/chapter4_variadic_templates.hpp
   )
 
 set(TARGET_NAME cpp_templates)
