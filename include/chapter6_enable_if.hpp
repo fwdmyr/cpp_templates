@@ -24,6 +24,25 @@ std::size_t foo() {
   return std::size_t{};
 }
 
+// Enable template when an array was passed regardless of it decaying to a
+// pointer (if t is rvalue, so T is type) or not (if t is lvalue, so T is
+// type&).
+// Using the automatically decaying auto (or std::remove_reference_t<T>) as a
+// return type instead of T is important for functions taking universal
+// references. If called with an lvalue, T is deduced to be type& and the return
+// type would be a reference that might dangle.
+template <typename T, typename = std::enable_if_t<std::is_array_v<T>>>
+auto baz(T &&t) {
+  return T{};
+}
+
+// It is allowed to call bar with a const lvalue of type where T is deduced to
+// be const type. This would cause compiler errors when we would then try to
+// modify t inside the function. Disabling the template for const arguments
+// avoids this and t becomes a true (in)out parameter.
+template <typename T, typename = std::enable_if_t<!std::is_const_v<T>>>
+void bar(T &t) {}
+
 class String {
 public:
   // Member function templates are greedy and might lead to unexpected

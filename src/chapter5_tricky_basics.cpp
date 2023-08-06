@@ -9,4 +9,6 @@ int main() {
   print_bitset(bs);
 
   std::cout << pi_approx<float> << '\n';
+
+  return 0;
 }

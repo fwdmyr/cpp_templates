@@ -12,4 +12,6 @@ int main() {
   std::ignore = String(str_object);
   // Calls implicitly generated move-constructor
   std::ignore = String(std::move(str_object));
+
+  return 0;
 }

@@ -31,4 +31,6 @@ int main() {
   variadic_print_indices(str_array, Index<1U, 0U, 2U, 4U, 3U>{});
 
   const auto mocked_array = MockedArray{1, 2, 3, 4, 5};
+
+  return 0;
 }
