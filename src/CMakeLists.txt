@@ -6,3 +6,4 @@ endmacro()
 
 package_add_executable(chapter4_variadic_templates chapter4_variadic_templates.cpp)
 package_add_executable(chapter5_tricky_basics chapter5_tricky_basics.cpp)
+package_add_executable(chapter6_enable_if chapter6_enable_if.cpp)
