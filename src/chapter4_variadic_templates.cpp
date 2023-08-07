@@ -12,11 +12,11 @@ int main() {
             << fold_square_and_add(std::move(initial_value), 1.0, 2.0, 3.0, 4.0)
             << '\n';
 
-  std::cout << "Folded and is "
-            << (fold_and(true, false, true) ? "true" : "false") << '\n';
+  std::cout << std::boolalpha;
+  std::cout << "Folded and is " << fold_and(true, false, true) << '\n';
 
   std::cout << "Folded homogenity check is "
-            << (fold_is_homogeneous(5.0, 1.0F, 2U) ? "true" : "false") << '\n';
+            << fold_is_homogeneous(5.0, 1.0F, 2U) << '\n';
 
   auto root = new Node{0};
   root->left = new Node{1};

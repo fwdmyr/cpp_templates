@@ -1,5 +1,5 @@
-#ifndef CPP_TEMPLATES_CHAPTER_COMPILE_TIME_PROGRAMMING
-#define CPP_TEMPLATES_CHAPTER_COMPILE_TIME_PROGRAMMING
+#ifndef CPP_TEMPLATES_CHAPTER8_COMPILE_TIME_PROGRAMMING
+#define CPP_TEMPLATES_CHAPTER8_COMPILE_TIME_PROGRAMMING
 
 #include <iostream>
 #include <tuple>
@@ -136,4 +136,4 @@ auto safe_len(const T &t) -> decltype((void)(t.size)(), T::size_type()) {
 
 inline std::size_t safe_len(...) { return std::size_t{}; }
 
-#endif // !CPP_TEMPLATES_CHAPTER_COMPILE_TIME_PROGRAMMING
+#endif // !CPP_TEMPLATES_CHAPTER8_COMPILE_TIME_PROGRAMMING
