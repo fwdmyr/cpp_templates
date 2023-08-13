@@ -290,7 +290,8 @@ template <typename F, typename... Args> std::false_type is_valid_impl(...);
 // Define a generic lambda that takes a lambda f and returns whether calling f
 // with args is valid.
 // is_valid is a closure that itself returns a closure produced by the inner
-// lambda expression.
+// lambda expression. This returned closure can be invoked with args and yields
+// true_type or false_type based on which is_valid_impl is resolved.
 // is_valid is a traits factory that generates traits-checking objects from its
 // arguments.
 inline constexpr auto is_valid = [](auto f) {
@@ -304,8 +305,8 @@ inline constexpr auto is_valid = [](auto f) {
 template <typename T> struct TypeT {
   using Type = T;
 };
-
-// Helper to wrap a type as a value by default-constructing it.
+// Helper to wrap a type as a value by default-constructing the specialized
+// helper template class TypeT.
 template <typename T> constexpr auto type = TypeT<T>{};
 // Helper to unwrap a wrapped type in unevaluated contexts by passing the
 // wrapper to value_t.
@@ -319,14 +320,18 @@ template <typename T> T value_t(TypeT<T>);
  */
 
 // Typical use-case of generic lambda SFINAE.
-// decltype(value_t(x))() tries to default-construct the type wrapped into x.
+// decltype(value_t(x))() tries to default-construct the type wrapped into x in
+// an unevaluated context.
+// is_default_constructible is a closure that can be evaluated by calling it
+// with a single argument of type TypeT<T>.
 constexpr auto is_default_constructible =
     is_valid([](auto x) -> decltype((void)decltype(value_t(x))()) {});
+// Use like this: constexpr auto res = is_default_constructible(type<int>);
 
 /**
  * Is expanded to :
  *
- * constexpr auto is_default_constructible2 = [](auto &&...args) {
+ * constexpr auto is_default_constructible = [](auto &&...args) {
  *  return decltype(is_valid_impl<
  *                 decltype([
  *                 ](auto x) -> decltype((void)decltype(value_t(x))())),
