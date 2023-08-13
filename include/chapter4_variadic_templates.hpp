@@ -19,7 +19,8 @@ void variadic_print(FirstArg &&first_arg, Args &&...args) {
 
 template <typename T, char Delimiter = ' '> class AddDelimiter {
 public:
-  template <typename ValueType>
+  template <typename ValueType, typename = std::enable_if_t<std::is_same_v<
+                                    std::decay_t<ValueType>, std::decay_t<T>>>>
   explicit AddDelimiter(ValueType &&t) : value{std::move(t)} {}
 
   friend std::ostream &operator<<(std::ostream &os,

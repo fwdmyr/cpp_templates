@@ -26,7 +26,6 @@ public:
   // instead leading to unexpected behavior.
   template <typename T_, template <typename E_, typename = std::allocator<E_>>
                          class Container_>
-
   ContainerWrapper &operator=(const ContainerWrapper<T_, Container_> &rhs);
 
   // Allow access to private members between all specialized class templates.

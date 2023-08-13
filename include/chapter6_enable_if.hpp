@@ -13,7 +13,7 @@ template <typename T> std::enable_if_t<(sizeof(T) > 4U)> foo() {}
 template <typename T, typename = std::enable_if_t<(sizeof(T) > 4U)>>
 void foo() {}
 
-// Substitutes int return type for enable_if_t expression.
+// Substitutes std::size_t return type for enable_if_t expression.
 // Otherwise, enable_if_t is not defined (SFINAE)
 template <typename T> std::enable_if_t<(sizeof(T) > 4U), std::size_t> foo() {
   return std::size_t{};
