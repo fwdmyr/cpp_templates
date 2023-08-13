@@ -91,4 +91,99 @@ auto accum(Iter start, Iter end) {
   return total;
 }
 
+// Removing references
+// Primary template that handles the default case, i.e. nothing to do
+template <typename T> struct RemoveReferenceT {
+  using Type = T;
+};
+// Specializations for lvalue and rvalue references
+template <typename T> struct RemoveReferenceT<T &> {
+  using Type = T;
+};
+template <typename T> struct RemoveReferenceT<T &&> {
+  using Type = T;
+};
+
+// Removing const qualifier
+template <typename T> struct RemoveConstT {
+  using Type = T;
+};
+template <typename T> struct RemoveConstT<const T> {
+  using Type = T;
+};
+
+// Removing volatile qualifier
+template <typename T> struct RemoveVolatileT {
+  using Type = T;
+};
+template <typename T> struct RemoveVolatileT<volatile T> {
+  using Type = T;
+};
+
+// Metafunction forwarding to inherit the type member from RemoveConstT
+template <typename T>
+struct RemoveConstVolatileT : RemoveConstT<typename RemoveVolatileT<T>::Type> {
+};
+template <typename T>
+using RemoveConstVolatile = typename RemoveConstVolatileT<T>::Type;
+
+// The primary template class for type decay
+template <typename T> struct DecayT : RemoveConstVolatileT<T> {};
+
+// Handle array-to-pointer decay with and without bounds
+template <typename T> struct DecayT<T[]> {
+  using Type = T *;
+};
+template <typename T, std::size_t N> struct DecayT<T[N]> {
+  using Type = T *;
+};
+
+// Handle function-to-pointer decay
+template <typename ReturnType, typename... Args>
+struct DecayT<ReturnType(Args...)> {
+  using Type = ReturnType (*)(Args...);
+};
+// Special case: function type that uses C-style varargs
+template <typename ReturnType, typename... Args>
+struct DecayT<ReturnType(Args..., ...)> {
+  using Type = ReturnType (*)(Args..., ...);
+};
+template <typename T> using Decay = typename DecayT<T>::Type;
+
+// True and false types
+template <bool val> struct BoolConstant {
+  using Type = BoolConstant<val>;
+  static constexpr bool value = val;
+};
+using TrueType = BoolConstant<true>;
+using FalseType = BoolConstant<false>;
+
+// Predicate traits using metafunction forwarding
+// Primary template that handles the default case and inherits from false type
+template <typename T1, typename T2> struct IsSameT : FalseType {};
+// Specialization for same types that inherits from true type instead
+template <typename T> struct IsSameT<T, T> : TrueType {};
+
+// Tag dispatch using true and false types
+// Is invoked if T is int
+template <typename T> void foo_impl(T &&, TrueType);
+// Is invoked otherwise
+template <typename T> void foo_impl(T &&, FalseType);
+// Function template that forwards the call to the implementations based on the
+// predicate evaluation
+template <typename T> void foo(T &&t) {
+  foo_impl(std::forward<T>(t), IsSameT<Decay<T>, int>{});
+}
+
+// TODO: Continue here
+
+// Result type traits
+template <typename T1, typename T2> struct PlusResultT {
+  // Declval produces a value of type without requiring type to be
+  // default-constructible.
+  using Type = decltype(std::declval<T1>() + std::declval<T2>());
+};
+template <typename T1, typename T2>
+using PlusResult = typename PlusResultT<T1, T2>::Type;
+
 #endif // !CPP_TEMPLATES_CHAPTER19_IMPLEMENTING_TRAITS
