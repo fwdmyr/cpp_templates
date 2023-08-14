@@ -454,4 +454,44 @@ template <typename T> struct UnsignedT {
    */
 };
 
+// Detecting non-throwing operations
+
+// Primary template if move-construction is not valid
+template <typename, typename = std::void_t<>>
+struct IsNothrowMoveConstructibleT : std::false_type {};
+
+// Specialization that might be SFINAEd-out if move-construction is not valid.
+// Therefore, the noexcept expression will only be evaluated in contexts when
+// move-construction is generally possible.
+// decltype(T(std::declval<T>())) checks if T(T()), i.e. move-construction, is
+// valid.
+template <typename T>
+struct IsNothrowMoveConstructibleT<T,
+                                   std::void_t<decltype(T(std::declval<T>()))>>
+    : std::bool_constant<noexcept(T(std::declval<T>()))> {};
+
+// Alias and variable templates reduce boilerpate (no typename and ::type or
+// ::value required) but there are downsides:
+//
+// 1) Alias templates cannot be specialized and will likely need to redirect to
+//    a class template anyway.
+// 2) Some traits are meant to be specialized by the
+//    user (directly conflicting with 1).
+// 3) The use of the alias template will
+//    always instantiate the type which may be undesired (see the IfThenElse
+//    example above).
+//
+// => Provide both class templates and alias/variable templates with a distinct
+//    and consistent naming convention so the user may choose depending on the
+//    use-case.
+
+// Determining fundamental types
+
+// Primary template.
+template <typename T> struct IsFundamentalT : std::false_type {};
+// Macro to specialize for fundamental types.
+#define REGISTER_FUNDAMENTAL_TYPE(T)                                           \
+  template <> struct IsFundamentalT<T> : std::true_type {};
+// Use: REGISTER_FUNDAMENTAL_TYPE(bool);
+
 #endif // !CPP_TEMPLATES_CHAPTER19_IMPLEMENTING_TRAITS
