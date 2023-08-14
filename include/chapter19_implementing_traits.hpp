@@ -6,6 +6,13 @@
 #include <tuple>
 #include <type_traits>
 
+// Helper to ignore any number of template parameters.
+#ifndef __cpp_lib_void_t
+namespace std {
+template <typename...> using void_t = void;
+}
+#endif
+
 /**
  * Possible Standard Library implementation for iterator_traits pointer
  * specialization that enables our implementation of the accum function.
@@ -190,12 +197,26 @@ template <typename T> void foo(T &&t) {
  * }
  */
 
+template <typename, typename, typename = std::void_t<>>
+struct HasPlusT : std::false_type {};
+
+template <typename T1, typename T2>
+struct HasPlusT<T1, T2,
+                std::void_t<decltype(std::declval<T1>() + std::declval<T2>())>>
+    : std::true_type {};
+
 // Result type traits
-template <typename T1, typename T2> struct PlusResultT {
+template <typename T1, typename T2, bool = HasPlusT<T1, T2>::value>
+struct PlusResultT {
   // Declval produces a value of type without requiring type to be
   // default-constructible.
   using Type = decltype(std::declval<T1>() + std::declval<T2>());
 };
+// Partial specialization that does not provide the Type member and is the
+// default if there is no operator+() defined for mixing T1 and T2.
+// This leads to functions for which this PlusResultT is invalid, i.e. does
+// not provide the Type member, to be SFINAED-out.
+template <typename T1, typename T2> struct PlusResultT<T1, T2, false> {};
 template <typename T1, typename T2>
 using PlusResult = typename PlusResultT<T1, T2>::Type;
 
@@ -204,9 +225,17 @@ template <typename T> class Array {};
 // Nesting of traits to get the decayed type determined by PlusResult.
 // This allows for sensible calls to the plus-operator when types T1 and T2 are
 // different.
+// This would get SFINAED-out if HasPlusT inside PlusResultT evaluates to false
+// and therefore the alias PlusResult is invalid as it lacks the Type member.
 template <typename T1, typename T2>
 Array<RemoveReference<RemoveConstVolatile<PlusResult<T1, T2>>>>
 operator+(const Array<T1> &, const Array<T2> &);
+
+// We do this indirection via HasPlusT because a trait template should never
+// fail at instantiation time if given reasonable template arguments as input.
+// Therefore, it is common to perform the check twice:
+// Once to find out whether the operation is valid (HasPlusT)
+// Once to compute the result (PlusResultT)
 
 // SFNIAE-out function overloads
 
@@ -250,13 +279,6 @@ template <typename T>
 struct IsDefaultConstructibleT : IsDefaultConstructibleHelper<T>::Type {};
 
 // SFNIAE-out partial specializations
-
-// Helper to ignore any number of template parameters.
-#ifndef __cpp_lib_void_t
-namespace std {
-template <typename...> using void_t = void;
-}
-#endif
 
 // Primary template
 // Second template argument enables us th provide partial specializations that
@@ -341,5 +363,62 @@ constexpr auto is_default_constructible =
 
 constexpr auto has_first =
     is_valid([](auto x) -> decltype((void)value_t(x).first) {});
+
+// Detecting members
+
+// Primary template.
+template <typename, typename = std::void_t<>>
+struct HasSizeTypeT : std::false_type {};
+// Partial specialization that might be SFNIAEd-out. Also gets SFNIAEd-out when
+// size_type is private.
+template <typename T>
+struct HasSizeTypeT<T, std::void_t<typename Decay<T>::size_type>>
+    : std::true_type {};
+
+// Detecting arbitrary properties of a class (like member types, member
+// functions, ...) can be achieved by defining a macro like so.
+#define DEFINE_HAS_TYPE(Member)                                                \
+  template <typename, typename = std::void_t<>>                                \
+  struct HasTypeT_##Member : std::false_type {};                               \
+  template <typename T>                                                        \
+  struct HasTypeT_##Member<T, std::void_t<typename T::Member>>                 \
+      : std::true_type {};
+// DEFINE_HAS_TYPE(size_type); if (HasTypeT_size_type<int>::value) ...;
+
+// Due to the nature of std::void_t, we can combine multiple constraints into a
+// single trait.
+template <typename, typename = std::void_t<>>
+struct IsIterableT : std::false_type {};
+template <typename T>
+struct IsIterableT<T, std::void_t<decltype(std::declval<T>().begin()),
+                                  decltype(std::declval<T>().end()),
+                                  decltype(std::declval<T>().cbegin()),
+                                  decltype(std::declval<T>().cend())>>
+    : std::true_type {};
+
+// We can also use generic lambdas to detect arbitrary members since C++17
+// Note that we do not have to take the indirection via value_t as return-type
+// is now evaluated as part of the immediate context and SFINAE occurs.
+constexpr auto has_size_type =
+    is_valid([](auto &&x) -> typename std::decay_t<decltype(x)>::size_type {});
+template <typename T>
+using has_size_type_t = decltype(has_size_type(std::declval<T>()));
+constexpr auto has_less =
+    is_valid([](auto &&x, auto &&y) -> decltype(x < y) {});
+template <typename T1, typename T2>
+using has_less_t = decltype(has_less(std::declval<T1>(), std::declval<T2>()));
+// std::cout << std::boolalpha << std::has_less_t<int, double>::value << '\n';
+
+// If-Then-Else Traits (available as std::conditional<> in the Standard Library)
+
+template <bool Cond, typename TrueT, typename FalseT> struct IfThenElseT {
+  using Type = TrueT;
+};
+template <typename TrueT, typename FalseT>
+struct IfThenElseT<false, TrueT, FalseT> {
+  using Type = FalseT;
+};
+template <bool Cond, typename TrueT, typename FalseT>
+using IfThenElse = typename IfThenElseT<Cond, TrueT, FalseT>::Type;
 
 #endif // !CPP_TEMPLATES_CHAPTER19_IMPLEMENTING_TRAITS
