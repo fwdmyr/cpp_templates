@@ -421,4 +421,37 @@ struct IfThenElseT<false, TrueT, FalseT> {
 template <bool Cond, typename TrueT, typename FalseT>
 using IfThenElse = typename IfThenElseT<Cond, TrueT, FalseT>::Type;
 
+// Example: A trait that yields the corresponding unsigned type from the signed
+// type. There exists std::make_unsigned but it requires that the type is a
+// signed integral type and not bool. If these requirements are not met, using
+// std::make_unsigned is undefined behavior.
+
+// Template arguments for both the then (TrueT) and else (FalseT) branches are
+// evaluated before the selection so they may not contain ill-formed code.
+// Therefore, we wrap the desired TrueT and FalseT in type functions themselves.
+template <typename T> struct IdentityT {
+  using Type = T;
+};
+template <typename T> struct MakeUnsignedT {
+  using Type = typename std::make_unsigned<T>::type;
+};
+// IfThenElse only selects the correct type function instance and only then the
+// ::Type is evaluated for the selected type function instance.
+template <typename T> struct UnsignedT {
+  using Type =
+      typename IfThenElse<std::is_integral_v<T> && !std::is_same_v<T, bool>,
+                          MakeUnsignedT<T>, IdentityT<T>>
+      // We need to apply the ::Type after selection!
+      ::Type;
+  /**
+   * Also this would not even work as for T = bool, the ill-formed expression
+   * MakeUnsignedT<bool>::Type would be evaluated before the selection occurs
+   * and we get undefined behavior.
+   *
+   * using Type = typename
+   * IfThenElse<std::is_integral_v<T> && !std::is_same_v<T, bool>,
+   * MakeUnsignedT<T>::Type, T>;
+   */
+};
+
 #endif // !CPP_TEMPLATES_CHAPTER19_IMPLEMENTING_TRAITS
