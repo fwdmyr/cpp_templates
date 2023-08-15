@@ -186,8 +186,8 @@ template <typename T> void foo(T &&t) {
 
 /**
  * Possible Standard Library implementation for declval
- * that produces a value of type without requiring type to be
- * default-constructible.
+ * that produces a value of type in unevaluated contexts without requiring type
+ * to be default-constructible.
  * It is intentionally left undefined as it is only meant to be used in contexts
  * where no definition is needed (decltype, sizeof, ...).
  *
@@ -241,7 +241,7 @@ operator+(const Array<T1> &, const Array<T2> &);
 
 template <typename T> struct IsUnimprovedDefaultConstructibleT {
 private:
-  // test() trying substitute call of a default constructor for T passed as U.
+  // test() tries to substitute call of a default constructor for T passed as U.
   // Matches iff requested check succeeds. Note that the second template
   // parameter cannot be deduced from function arguments.
   // We cannot directly pass T here as for any T, all member functions are
@@ -281,7 +281,7 @@ struct IsDefaultConstructibleT : IsDefaultConstructibleHelper<T>::Type {};
 // SFNIAE-out partial specializations
 
 // Primary template
-// Second template argument enables us th provide partial specializations that
+// Second template argument enables us to provide partial specializations that
 // use an arbitrary number of compile-time constructs.
 template <typename, typename = std::void_t<>>
 struct IsDefaultConstructibleT2 : std::false_type {};
@@ -317,7 +317,10 @@ template <typename F, typename... Args> std::false_type is_valid_impl(...);
 // is_valid is a traits factory that generates traits-checking objects from its
 // arguments.
 inline constexpr auto is_valid = [](auto f) {
+  // Returns a closure that can be invoked with args... and checks if f is
+  // callable with args...
   return [](auto &&...args) {
+    // true_type or false_type based on f being callable with args...
     return decltype(is_valid_impl<decltype(f), decltype(args) &&...>(
         nullptr)){};
   };
@@ -351,7 +354,7 @@ constexpr auto is_default_constructible =
 // Use like this: constexpr auto res = is_default_constructible(type<int>);
 
 /**
- * Is expanded to :
+ * Is expanded to:
  *
  * constexpr auto is_default_constructible = [](auto &&...args) {
  *  return decltype(is_valid_impl<
@@ -381,7 +384,7 @@ struct HasSizeTypeT<T, std::void_t<typename Decay<T>::size_type>>
   template <typename, typename = std::void_t<>>                                \
   struct HasTypeT_##Member : std::false_type {};                               \
   template <typename T>                                                        \
-  struct HasTypeT_##Member<T, std::void_t<typename T::Member>>                 \
+  struct HasTypeT_##Member<T, std::void_t<typename Decay<T>::Member>>          \
       : std::true_type {};
 // DEFINE_HAS_TYPE(size_type); if (HasTypeT_size_type<int>::value) ...;
 
@@ -438,15 +441,19 @@ template <typename T> struct MakeUnsignedT {
 // IfThenElse only selects the correct type function instance and only then the
 // ::Type is evaluated for the selected type function instance.
 template <typename T> struct UnsignedT {
+  // First evaluates all template arguments, then selects the valid
+  // specialization based on the first condition argument. Only then the ::Type
+  // is applied.
   using Type =
       typename IfThenElse<std::is_integral_v<T> && !std::is_same_v<T, bool>,
                           MakeUnsignedT<T>, IdentityT<T>>
       // We need to apply the ::Type after selection!
       ::Type;
+
   /**
-   * Also this would not even work as for T = bool, the ill-formed expression
-   * MakeUnsignedT<bool>::Type would be evaluated before the selection occurs
-   * and we get undefined behavior.
+   * Also following would not even work as for T = bool, the ill-formed
+   * expression MakeUnsignedT<bool>::Type would be evaluated before the
+   * selection occurs and we get undefined behavior.
    *
    * using Type = typename
    * IfThenElse<std::is_integral_v<T> && !std::is_same_v<T, bool>,
@@ -465,6 +472,9 @@ struct IsNothrowMoveConstructibleT : std::false_type {};
 // move-construction is generally possible.
 // decltype(T(std::declval<T>())) checks if T(T()), i.e. move-construction, is
 // valid.
+// Same logic from IfThenElse applies. First, the template arguments are
+// evaluated. Only then will the evaluation of the noexcept expression take
+// place iff the specialization for move-constructable types is selected.
 template <typename T>
 struct IsNothrowMoveConstructibleT<T,
                                    std::void_t<decltype(T(std::declval<T>()))>>
@@ -475,23 +485,107 @@ struct IsNothrowMoveConstructibleT<T,
 //
 // 1) Alias templates cannot be specialized and will likely need to redirect to
 //    a class template anyway.
-// 2) Some traits are meant to be specialized by the
-//    user (directly conflicting with 1).
-// 3) The use of the alias template will
-//    always instantiate the type which may be undesired (see the IfThenElse
-//    example above).
+// 2) Some traits are meant to be specialized by the user (directly conflicting
+//    with 1).
+// 3) The use of the alias template will always instantiate the type which may
+//    be undesired (see the IfThenElse example above).
 //
 // => Provide both class templates and alias/variable templates with a distinct
 //    and consistent naming convention so the user may choose depending on the
 //    use-case.
 
-// Determining fundamental types
+// Type classification
 
 // Primary template.
 template <typename T> struct IsFundamentalT : std::false_type {};
 // Macro to specialize for fundamental types.
 #define REGISTER_FUNDAMENTAL_TYPE(T)                                           \
   template <> struct IsFundamentalT<T> : std::true_type {};
-// Use: REGISTER_FUNDAMENTAL_TYPE(bool);
+// Use: REGISTER_FUNDAMENTAL_TYPE(bool);}
+
+// For these compound types, one would usually define members that lets the user
+// query attributes like base types, array dimensions, return types, ...
+template <typename> struct IsPointerT : std::false_type {};
+template <typename T> struct IsPointerT<T *> : std::true_type {};
+template <typename> struct IsLValueReferenceT : std::false_type {};
+template <typename T> struct IsLValueReferenceT<T &> : std::true_type {};
+template <typename> struct IsRValueReferenceT : std::false_type {};
+template <typename T> struct IsRValueReferenceT<T &&> : std::true_type {};
+template <typename T>
+// If lvalue reference, inherit from IsLValueReferenceT and get std::true_type
+// via metafunction forwarding, else inherit from IsRValueReferenceT and get
+// std::true_type if T is an rvalue reference or std::false_type otherwise.
+struct IsReferenceT
+    : IfThenElseT<IsLValueReferenceT<T>::value, IsLValueReferenceT<T>,
+                  IsRValueReferenceT<T>>::Type {};
+template <typename> struct IsArrayT : std::false_type {};
+template <typename T, std::size_t N> struct IsArrayT<T[N]> : std::true_type {};
+template <typename T> struct IsArrayT<T[]> : std::true_type {};
+template <typename> struct IsPointerToMemberT : std::false_type {};
+template <typename T, typename C>
+struct IsPointerToMemberT<T C::*> : std::true_type {};
+template <typename> struct IsFunctionT : std::false_type {};
+template <typename ReturnType, typename... Args>
+struct IsFunctionT<ReturnType(Args...)> : std::true_type {};
+template <typename ReturnType, typename... Args>
+struct IsFunctionT<ReturnType(Args..., ...)> : std::true_type {};
+// Many more partial specializations for function types are required to
+// correctly classify all combinations of const, volatile, lvalue and rvalue
+// reference qualifiers.
+template <typename, typename = std::void_t<>>
+struct IsClassT : std::false_type {};
+// Exploits the fact that only class types can be used as basis for
+// pointer-to-member types. Note that the actual presence of an accessible
+// member of type int is not required here and int is chosen arbitrarily.
+// Lambda expressions are unnamed class types and hence would also yield true.
+template <typename T>
+struct IsClassT<T, std::void_t<int T::*>> : std::true_type {};
+// Enumeration types are the only types not convered by the implemented type
+// classification scheme yet.
+template <typename T> struct IsEnumerationT {
+  // clang-format off
+  static constexpr bool value =
+      !IsFundamentalT<T>::value &&
+      !IsPointerT<T>::value &&
+      !IsReferenceT<T>::value &&
+      !IsArrayT<T>::value &&
+      !IsPointerToMemberT<T>::value &&
+      !IsFunctionT<T>::value &&
+      !IsClassT<T>::value;
+  // clang-format on
+};
+
+// So far, we only looked at property traits which can be used to determine the
+// properties of template parameters. In contrast, policy traits define how some
+// types should be treated. An example is the std::allocator trait that defines
+// how memory allocation should be handled for the standard container types.
+
+// In-depth policy trait example: Read-only parameter types
+
+template <typename T> struct ReadParam {
+  // If T is small and trivially move- and copy-constructible (i.e move or copy
+  // operation is just a simple move or copy of the underlying bytes), passing
+  // the parameter by value is fine. Else pass by const& because copy and move
+  // are most likely too expensive.
+  using Type = IfThenElse<sizeof(T) <= 2U * sizeof(void *) &&
+                              std::is_trivially_copy_constructible_v<T> &&
+                              std::is_trivially_move_constructible_v<T>,
+                          T, const T &>;
+};
+
+template <typename... Args>
+void bar_impl(typename ReadParam<Args...>::Type &&args) {
+  // Do some work
+}
+
+// Forwarding to bar_impl() allows calling bar() with argument deduction, i.e.
+// bar(5, 7.3) instead of bar<int, double>(5, 7.3), as the call without argument
+// deduction is hidden in the forwarding-call of bar_impl().
+// We pay for this cleaner interface with the overhead that comes with
+// perfect-forwarding (assuming the compiler does not elide the inline function
+// bar_impl()).
+template <typename... Args> void bar(Args &&...param) {
+  bar_impl<Args...>(std::forward<Args>(param)...);
+}
 
 #endif // !CPP_TEMPLATES_CHAPTER19_IMPLEMENTING_TRAITS
