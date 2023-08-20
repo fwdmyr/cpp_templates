@@ -1,175 +1,139 @@
 #ifndef CPP_TEMPLATES_CHAPTER22_BRIDGING_STATIC_AND_DYNAMIC_POLYMORPHISM
 #define CPP_TEMPLATES_CHAPTER22_BRIDGING_STATIC_AND_DYNAMIC_POLYMORPHISM
 
-#include <iterator>
-#include <type_traits>
+#include <exception>
+#include <memory>
+#include <optional>
+#include <utility>
 
-// Curiously Recurring Template Pattern (CRTP)
-// Pass derived class as a template argument to one of its base classes.
+// In this chapter, we develop our own function wrapper (like std::function)
+// that lambdas, functor structs and normal function pointers can bind to.
+// This combines favorable properties of static and dynamic polymorphism.
 
-template <typename Derived> class CuriousBase {};
-// Looks like this
-class Curious : public CuriousBase<Curious> {};
-// or this
-template <typename T>
-class CuriousTemplate : public CuriousBase<CuriousTemplate<T>> {};
+template <typename R, typename... Args> class FunctorBridge {
+public:
+  virtual ~FunctorBridge() = default;
+  virtual FunctorBridge *clone() const = 0;
+  // Making this const protects against invoking non-const operator() overloads.
+  virtual R invoke(Args... args) const = 0;
+};
 
-// The base class can customize its own behavior to the derived class without
-// requiring the use of virtual functions. Therefore, CRTP is useful to factor
-// out implementations that can only be member functions (constructor,
-// destructor, subscript operators) or are dependent on the derived class's
-// identity.
-
-// Example: Count live objects of type.
-
-template <typename T> class ObjectCounter {
+// This class bridges between static and dynamic polymorphism. When we define
+// specializations for specific functors (i.e. static polymorphism) and create a
+// new instance of this derived type on the heap and then assign the resulting
+// pointer-to-derived to a pointer-to-base, the type information is lost due to
+// the conversion that takes place. The functor whose type is lost can still be
+// invoked without knowing its type by using dynamic dispatch via virtual
+// functions (i.e. dynamic polymorphism).
+template <typename Functor, typename R, typename... Args>
+class SpecificFunctorBridge : public FunctorBridge<R, Args...> {
 private:
-  inline static std::size_t count{0U};
-
-protected:
-  ObjectCounter() { count++; }
-  ObjectCounter(const ObjectCounter<T> &) { count++; }
-  ObjectCounter(ObjectCounter<T> &&) { count++; }
-  ~ObjectCounter() { count--; }
+  Functor functor;
 
 public:
-  static std::size_t live() { return count; }
-};
-
-template <typename T> class Countable : public ObjectCounter<Countable<T>> {};
-// Since live is public and static, we can query the count like this:
-// const auto live_countable_chars = Countable<char>::live();
-
-// Example: Operator implementations
-
-// Factor behavior into base class while retaining the identity of the derived
-// classes.
-template <typename Derived> struct EqualityComparable {
-  // The Barton-Nackman-Trick:
-  // Friend function to give both parameters equal behavior for conversions.
-  // This also avoids the need for a general operator!= template living in an
-  // accessible namespace that matches calls with arguments of any types.
-  //
-  // NOTE: Friend functions are non-template, non-member functions that are
-  // in the scope of the nearest enclosing namespace!!!
-  friend bool operator!=(const Derived &lhs, const Derived &rhs) {
-    return !(lhs == rhs);
+  // Functor is of type FunctorType
+  template <typename FunctorType>
+  SpecificFunctorBridge(FunctorType &&f)
+      : functor{std::forward<FunctorType>(f)} {}
+  SpecificFunctorBridge *clone() const override {
+    return new SpecificFunctorBridge(functor);
+  }
+  R invoke(Args... args) const override {
+    return functor(std::forward<Args>(args)...);
   }
 };
 
-struct WithEqualityOperator : public EqualityComparable<WithEqualityOperator> {
-  friend bool operator==(const WithEqualityOperator &lhs,
-                         const WithEqualityOperator &rhs) {
-    // Implement comparison logic
-    return bool{};
-  }
-};
+// Primary template
+template <typename Signature> class FunctionPtr {};
 
-// Example: Iterator facade (p501..508)
-
-// Let CRPT base define the public interface in terms of a much smaller and
-// easier to implement interface exposed by the CRTP derived class. This is
-// useful when new types need to meet the requirements of an existing interface.
-
-template <typename Derived, typename Value, typename Reference = Value &,
-          typename Distance = std::ptrdiff_t>
-class ForwardIteratorFacade {
-public:
-  using value_type = typename std::decay_t<Value>;
-  using reference = Reference;
-  using pointer = Value *;
-  using difference_type = Distance;
-  using iterator_category = std::forward_iterator_tag;
-
-  // Implements the general public forward iterator interface in terms of the
-  // functions dereference(), increment() and equals() that must be implemented
-  // by Derived.
-  reference operator*() const { return as_derived().dereference(); }
-  Derived &operator++() {
-    as_derived().increment();
-    return as_derived();
-  }
-  Derived operator++(int) {
-    const auto result = as_derived();
-    as_derived().increment();
-    return result;
-  }
-  friend bool operator==(const ForwardIteratorFacade &lhs,
-                         const ForwardIteratorFacade &rhs) {
-    return lhs.as_derived().equals(rhs.as_derived());
-  }
-
+// Partial specialization
+template <typename R, typename... Args> class FunctionPtr<R(Args...)> {
 private:
-  // Access the derived class.
-  Derived &as_derived() { return *static_cast<Derived *>(this); }
-  const Derived &as_derived() const {
-    return *static_cast<const Derived *>(this);
+  FunctorBridge<R, Args...> *bridge{nullptr};
+
+public:
+  // Constructors
+  FunctionPtr() = default;
+  FunctionPtr(const FunctionPtr &other) { bridge = other.bridge->clone(); };
+  FunctionPtr(FunctionPtr &other)
+      : FunctionPtr{static_cast<const FunctionPtr &>(other)} {}
+  FunctionPtr(FunctionPtr &&other) : bridge{other.bridge} {
+    other.bridge = nullptr;
+  }
+  template <typename FunctionType>
+  FunctionPtr(FunctionType &&f) : bridge{nullptr} {
+
+    // The actual function type is only known to the specialization of
+    // SpecificFunctorBridge. After the new object of specialized type is
+    // created on the heap, the pointer-to-derived converts to pointer-to-base
+    // (because bridge is of abstract base class type). When the function
+    // returns, the function type is therefore lost.
+    // This technique of bridging between static and dynamic polymorphism is
+    // therefore called type erasure.
+    using Bridge =
+        SpecificFunctorBridge<std::decay_t<FunctionType>, R, Args...>;
+    bridge = new Bridge(std::forward<FunctionType>(f));
+  }
+  FunctionPtr &operator=(const FunctionPtr &other) {
+    auto tmp{other};
+    swap(*this, other);
+    return *this;
+  }
+  // Assignment operators
+  FunctionPtr &operator=(FunctionPtr &&other) {
+    delete bridge;
+    bridge = other.bridge;
+    other.bridge = nullptr;
+    return *this;
+  }
+  template <typename FunctionType> FunctionPtr &operator=(FunctionType &&f) {
+    FunctionPtr tmp{std::forward<FunctionType>(f)};
+    swap(*this, tmp);
+    return *this;
+  }
+  // Destructor
+  ~FunctionPtr() { delete bridge; }
+
+  // Helpers
+  friend void swap(FunctionPtr &lhs, FunctionPtr &rhs) {
+    std::swap(lhs.bridge, rhs.bridge);
+  }
+  explicit operator bool() const { return bridge == nullptr; }
+
+  // Invocation
+  R operator()(Args... args) const {
+    return bridge->invoke(std::forward<Args>(args)...);
   }
 };
 
-// Implements a node of a singly-linked list.
-template <typename T> struct LinkedListNode {
-  ~LinkedListNode() { delete next; }
-  T value{};
-  LinkedListNode<T> *next{nullptr};
-};
+// Another example: Any
 
-// Implements the public forward iterator interface for LinkedListNode by CRTP.
-template <typename T>
-class LinkedListNodeIterator
-    : public ForwardIteratorFacade<LinkedListNodeIterator<T>, T> {
+struct BadTypeException : std::exception {};
+
+class Any {
 private:
-  LinkedListNode<T> *current{nullptr};
+  struct HolderBase {
+    virtual ~HolderBase() = default;
+  };
+
+  template <typename T> struct Holder : public HolderBase {
+    Holder(const T &object) : object{object} {}
+    Holder(T &&object) : object{std::move(object)} {}
+    T object;
+  };
+  HolderBase *held{nullptr};
 
 public:
-  LinkedListNodeIterator(LinkedListNode<T> *current = nullptr)
-      : current{current} {}
+  template <typename T>
+  Any(T &&object) : held{std::make_unique<T>(std::forward<T>(object))} {}
 
-  // Problem: LinkedListNodeIterator exposes public interface!
-  // This can be made private by defining an intermediary FacadeAccessor with
-  // static member functions that mirror this interface. Both the
-  // LinkedListNodeIterator and FacadeAccessor interface are the made private.
-  // FacadeAccessor declares ForwardIteratorFacade as a friend,
-  // LinkedListNodeIterator declares FacadeAccessor as a friend.
-  T &dereference() const { return current->value; }
-  void increment() { current = current->next; }
-  bool equals(const LinkedListNodeIterator &other) const {
-    return current == other.current;
+  bool has_value() const { return !(held == nullptr); }
+  template <typename T> const T &get_value() const {
+    if (const auto specific_held = dynamic_cast<const Holder<T> *>(held))
+      return *specific_held;
+    else
+      throw BadTypeException{};
   }
 };
-
-// Mixins
-
-// Customize behavior of a type without inheriting from it by inverting the
-// usual direction of inheritance. New classes that implement the customization
-// are mixed into the inheritance hierarchy as base classes of a class template
-// instead of deriving from it. Mixins can be seen as decorators.
-
-template <typename... Mixins> class Point : public Mixins... {
-public:
-  double x{};
-  double y{};
-  Point() : Mixins()..., x{}, y{} {}
-  Point(double x, double y) : Mixins()..., x{x}, y{y} {}
-};
-
-struct Label {
-  std::string label{};
-};
-
-struct Color {
-  uint8_t r{};
-  uint8_t g{};
-  uint8_t b{};
-};
-
-using PointWithLabelAndColor = Point<Label, Color>;
-// const auto label = static_cast<Label>(PointWithLabelAndColor{});
-
-// Curious Mixins combine Mixins with CRTP to get even more powerful decorators
-// that can tailor their behavior to the type of the derived class. This enables
-// the use of template classes like the ObjectCounter (see above) for instance.
-template <template <typename> class... Mixins>
-class CuriousDerived : public Mixins<CuriousDerived<Mixins...>>... {};
 
 #endif // !CPP_TEMPLATES_CHAPTER22_BRIDGING_STATIC_AND_DYNAMIC_POLYMORPHISM

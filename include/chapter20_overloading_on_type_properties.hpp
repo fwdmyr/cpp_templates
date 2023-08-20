@@ -1,7 +1,6 @@
 #ifndef CPP_TEMPLATES_CHAPTER20_OVERLOADING_ON_TYPE_PROPERTIES
 #define CPP_TEMPLATES_CHAPTER20_OVERLOADING_ON_TYPE_PROPERTIES
 
-#include "chapter19_implementing_traits.hpp"
 #include <iterator>
 
 // Tag dispatching
