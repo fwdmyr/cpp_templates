@@ -1,4 +1,4 @@
-#include "../include/chapter6_enable_if.hpp"
+#include "chapter6_enable_if.hpp"
 
 int main() {
   auto str = std::string{"string"};

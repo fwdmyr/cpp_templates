@@ -1,4 +1,4 @@
-#include "../include/chapter11_generic_libraries.hpp"
+#include "chapter11_generic_libraries.hpp"
 
 int main() {
   const auto fibonacci = std::vector<int>{1, 1, 2, 3, 5, 8, 13, 21};

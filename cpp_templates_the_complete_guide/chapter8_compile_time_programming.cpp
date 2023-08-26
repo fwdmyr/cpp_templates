@@ -1,4 +1,4 @@
-#include "../include/chapter8_compile_time_programming.hpp"
+#include "chapter8_compile_time_programming.hpp"
 
 int main() {
   std::ignore = cpp98::Alternative<69U>{};

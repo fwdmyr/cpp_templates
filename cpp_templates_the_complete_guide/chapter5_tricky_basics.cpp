@@ -1,4 +1,4 @@
-#include "../include/chapter5_tricky_basics.hpp"
+#include "chapter5_tricky_basics.hpp"
 
 int main() {
   const auto int_wrapper = ContainerWrapper<int, std::vector>{};

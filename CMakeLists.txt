@@ -2,9 +2,9 @@
 cmake_minimum_required(VERSION 3.14...3.26)
 
 project(
-  cpp_templates
+  advanced_cpp
   VERSION 0.1
-  DESCRIPTION "C++ Templates - The Complete Guide"
+  DESCRIPTION "Learning Advanced C++"
   LANGUAGES CXX)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
@@ -18,10 +18,9 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 endif()
 
 set(HEADERS_LIST
-  include/chapter4_variadic_templates.hpp
   )
 
-set(TARGET_NAME cpp_templates)
+set(TARGET_NAME advanced_cpp)
 
 add_library(${TARGET_NAME} INTERFACE)
 target_sources(${TARGET_NAME} INTERFACE HEADERS_LIST)
@@ -29,5 +28,7 @@ target_include_directories(${TARGET_NAME} INTERFACE include)
 target_compile_features(${TARGET_NAME} INTERFACE cxx_std_17)
 target_compile_options(${TARGET_NAME} INTERFACE -Wall -Wextra -Wpedantic -Werror)
 
-add_subdirectory(src)
+add_subdirectory(cpp_templates_the_complete_guide)
+add_subdirectory(exceptional_cpp)
+add_subdirectory(modern_cpp_design)
 
