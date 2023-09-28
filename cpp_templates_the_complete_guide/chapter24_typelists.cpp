@@ -18,5 +18,9 @@ int main() {
       Reduce<PopFront<SignedIntegralTypes>, LargerTypeT,
              Front<SignedIntegralTypes>>;
 
+  // Sort a list based on sizeof its types.
+  using InsertionSortedSignedIntegralTypes =
+      InsertionSort<SignedIntegralTypes, SmallerThanT>;
+
   return 0;
 }

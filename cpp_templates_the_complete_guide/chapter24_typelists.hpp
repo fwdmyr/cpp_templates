@@ -204,8 +204,65 @@ template <typename T, typename U>
 class LargerTypeT : public IfThenElseT<(sizeof(T) >= sizeof(U)), T, U> {};
 
 // Perform insertion sort on a typelist.
+// InsertSortedT is a metafunction that inserts a value into a sorted list at
+// the first position at which the list would remain sorted.
+template <typename List, typename Element,
+          template <typename T, typename U> typename Compare,
+          bool = IsEmpty<List>::value>
+class InsertSortedT;
+// Recursive case. Does the following case distinction:
+// 1) Prepend the list with the element to be inserted iff it belongs to the
+// front of the list.
+// 2) Split the list into head and tail, recurse to insert the element into the
+// tail and then prepend the head to the result of inserting the element into
+// the tail otherwise.
+// The recursion in (2) then does another case distinction itself where the new
+// list is the previous tail.
+template <typename List, typename Element,
+          template <typename T, typename U> typename Compare>
+class InsertSortedT<List, Element, Compare, false> {
+  // Computes the tail of the resulting list using the metafunctions IdentityT
+  // and InsertSortedT.
+  using NewTail = typename IfThenElse<
+      Compare<Element, Front<List>>::value, IdentityT<List>,
+      InsertSortedT<PopFront<List>, Element, Compare>>::Type;
+  // Computes the head of the resulting list.
+  using NewHead =
+      IfThenElse<Compare<Element, Front<List>>::value, Element, Front<List>>;
+
+public:
+  using Type = PushFront<NewTail, NewHead>;
+};
+template <typename List, typename Element,
+          template <typename T, typename U> typename Compare>
+class InsertSortedT<List, Element, Compare, true>
+    : public PushFrontT<List, Element> {};
+template <typename List, typename Element,
+          template <typename T, typename U> typename Compare>
+using InsertSorted = typename InsertSortedT<List, Element, Compare>::Type;
+
 template <typename List, template <typename T, typename U> typename Compare,
           bool = IsEmpty<List>::value>
 class InsertionSortT;
+// Recursive case. Splits the list into head and tail. The tail is sorted
+// recursively and the head is inserted into the correct position within the
+// inserted list. In other words, inserts the first element into a sorted list.
+// Compare takes two types and evaluates to a bool via its value member.
+template <typename List, template <typename T, typename U> typename Compare>
+using InsertionSort = typename InsertionSortT<List, Compare>::Type;
+template <typename List, template <typename T, typename U> typename Compare>
+class InsertionSortT<List, Compare, false>
+    : public InsertSortedT<InsertionSort<PopFront<List>, Compare>, Front<List>,
+                           Compare> {};
+template <typename List, template <typename T, typename U> typename Compare>
+class InsertionSortT<List, Compare, true> {
+public:
+  using Type = List;
+};
+
+// SmallerThan comparison metafunction for insertion sort.
+template <typename T, typename U> class SmallerThanT {
+  static constexpr bool value = (sizeof(T) < sizeof(U));
+};
 
 #endif // !CPP_TEMPLATES_CHAPTER24_TYPELISTS
