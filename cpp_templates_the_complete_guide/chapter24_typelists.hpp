@@ -145,4 +145,67 @@ public:
 };
 template <typename List> using PopBack = typename PopBackT<List>::Type;
 
+// Transform a typelist.
+// Template template parameter MetaFcn maps an input type to an output type.
+template <typename List, template <typename T> typename MetaFcn,
+          bool Empty = IsEmpty<List>::value>
+class TransformT;
+// Recursive case. Transform the first element in the typelist and push it to
+// the front of the sequence produced by recursively transforming the rest of
+// the elements in the typelist.
+template <typename List, template <typename T> typename MetaFcn>
+class TransformT<List, MetaFcn, false>
+    : public PushFrontT<typename TransformT<PopFront<List>, MetaFcn>::Type,
+                        typename MetaFcn<Front<List>>::Type> {};
+template <typename List, template <typename T> typename MetaFcn>
+class TransformT<List, MetaFcn, true> {
+public:
+  using Type = List;
+};
+template <typename List, template <typename T> typename MetaFcn>
+using Transform = typename TransformT<List, MetaFcn>::Type;
+
+// Metafunction to add const to a type
+template <typename T> struct AddConstT {
+  using Type = const T;
+};
+template <typename T> using AddConst = typename AddConstT<T>::Type;
+
+// Reducing a typelist.
+// Given typelist T with elements T1, T2, ..., Tn and an initial type I and
+// metafunction F. Compute F( ... F(F(I, T1), T2) ... Tn)
+template <typename List, template <typename X, typename Y> typename F,
+          typename I, bool = IsEmpty<List>::value>
+class ReduceT;
+// Recursive case. Applies F to the previous result (I) and the front of the
+// list. Then passes on the result of applying F as the initial type for the
+// reduction of the remainder of the list.
+// For each level of recursion, this means that:
+// 1) List := PopFront<List>           // Shrink the list to its Tail.
+// 2) I    := F<I, Front<List>>::Type  // Accumulate result of F<I, Head>.
+template <typename List, template <typename X, typename Y> typename F,
+          typename I>
+class ReduceT<List, F, I, false>
+    : public ReduceT<PopFront<List>, F, typename F<I, Front<List>>::Type> {};
+// Base case. Return I that also serves as the accumulator that captures the
+// current result. Also ensures that reducing the empty typelist yields the
+// initial type.
+template <typename List, template <typename X, typename Y> typename F,
+          typename I>
+class ReduceT<List, F, I, true> {
+public:
+  using Type = I;
+};
+template <typename List, template <typename X, typename Y> typename F,
+          typename I>
+using Reduce = typename ReduceT<List, F, I>::Type;
+
+template <typename T, typename U>
+class LargerTypeT : public IfThenElseT<(sizeof(T) >= sizeof(U)), T, U> {};
+
+// Perform insertion sort on a typelist.
+template <typename List, template <typename T, typename U> typename Compare,
+          bool = IsEmpty<List>::value>
+class InsertionSortT;
+
 #endif // !CPP_TEMPLATES_CHAPTER24_TYPELISTS
